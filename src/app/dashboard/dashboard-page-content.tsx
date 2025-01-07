@@ -8,6 +8,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ArrowRight, BarChart2, Clock, Database, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { DashboardEmptyState } from "./dashboard-empty-state";
 
 export const DashboardPageContent = () => {
 
@@ -25,12 +26,12 @@ export const DashboardPageContent = () => {
     })
 
     const { mutate: deleteCategory, isPending: isDeletingCategory } = useMutation({
-        mutationFn: async( name : string) =>{
+        mutationFn: async (name: string) => {
             await client.category.deleteCategory.$post({
                 name
             })
         },
-        onSuccess: ()=> {
+        onSuccess: () => {
             queryClient.invalidateQueries({
                 queryKey: ["user-events-categories"]
             })
@@ -48,9 +49,8 @@ export const DashboardPageContent = () => {
 
     if (!categories || categories.length === 0) {
         return (
-            <div>
-                empty
-            </div>
+
+            <DashboardEmptyState />
         )
     }
 
@@ -147,10 +147,10 @@ export const DashboardPageContent = () => {
                         <Button variant="outline" onClick={() => setDeletingCategory(null)}>
                             Cancel
                         </Button>
-                        <Button variant={"destructive"} onClick={()=> deletingCategory && deleteCategory(deletingCategory)}
-                        disabled={isDeletingCategory}
+                        <Button variant={"destructive"} onClick={() => deletingCategory && deleteCategory(deletingCategory)}
+                            disabled={isDeletingCategory}
                         >
-                            {isDeletingCategory? "Deleting..." : "Delete"}
+                            {isDeletingCategory ? "Deleting..." : "Delete"}
                         </Button>
                     </div>
                 </div>

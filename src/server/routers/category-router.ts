@@ -4,6 +4,9 @@ import { privateProcedure } from "../procedures"
 import { startOfMonth } from "date-fns"
 import { deleteCache } from "next/dist/server/lib/render-server"
 import { z } from "zod"
+import { CATEGORY_NAME_VALIDATOR } from "@/lib/validator/category-validator"
+import { color } from "motion/react"
+import { parseColor } from "@/lib/utils"
 
 export const categoryRouter = router({
   getEventCategories: privateProcedure.query(async ({ c, ctx }) => {
@@ -81,11 +84,66 @@ export const categoryRouter = router({
       const { name } = input
 
       await db.eventCategory.delete({
-          where: { name_userId: { name, userId: ctx.user.id } },
-        })
+        where: { name_userId: { name, userId: ctx.user.id } },
+      })
 
-      c.json({
-        success: true,
+      return c.json({ success: true })
+    }),
+
+  createEventCategory: privateProcedure
+    .input(
+      z.object({
+        name: CATEGORY_NAME_VALIDATOR,
+        color: z
+          .string()
+          .min(1, "Color is required.")
+          .regex(/^#[0-9A-F]{6}$/i, "Color must be a valid color format."),
+        emoji: z.string().emoji("Invalid emoji").optional(),
+      })
+    )
+    .mutation(async ({ c, ctx, input }) => {
+      const { user } = ctx
+      const { name, color, emoji } = input
+
+      // Todo: ADD PAID PLANS
+
+      const eventCategory = await db.eventCategory.create({
+        data: {
+          name: name.toLowerCase(),
+          color: parseColor(color),
+          emoji: emoji,
+          userId: user.id,
+        },
+      })
+
+      return c.json({
+        eventCategory,
       })
     }),
+
+  insertQuickstartCategories: privateProcedure.mutation(async ({ c, ctx }) => {
+    const categories = await db.eventCategory.createMany({
+      data: [
+        {
+          name: "Bug",
+          emoji: "🐛",
+          color: 0xff6b6b,
+        },
+        {
+          name: "Sale",
+          emoji: "💰",
+          color: 0xffeb3b,
+        },
+        {
+          name: "Question",
+          emoji: "🤔",
+          color: 0x6c5ce7,
+        },
+      ].map((category) => ({
+        ...category,
+        userId: ctx.user.id,
+      })),
+    })
+    return c.json({ success: true, count: categories.count })
+  }),
 })
