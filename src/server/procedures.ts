@@ -5,10 +5,12 @@ import { currentUser } from "@clerk/nextjs/server"
 
 const authMiddleware = j.middleware(async ({c,next})=>{
 
-    const authHeader = c.req.header("Authorization")
+    const authHeader = c.req.header("Cookie")
+    console.log(authHeader)
     if (authHeader){
         // Bearer <API_KEY>
         const apiKey = authHeader.split(" ")[1]
+        console.log(apiKey)
 
         const user = await db.user.findUnique({
             where: {
@@ -23,7 +25,9 @@ const authMiddleware = j.middleware(async ({c,next})=>{
     }
 
     const auth = await currentUser()
+    console.log(auth)
     if (!auth){
+        console.log('inside auth')
         throw new HTTPException(401,{message:"Unauthorized"})
     }
 
@@ -34,6 +38,7 @@ const authMiddleware = j.middleware(async ({c,next})=>{
     })
 
     if (!user){
+        console.log('inside auth')
         throw new HTTPException(401,{message:"Unauthorized"})
     }
 
