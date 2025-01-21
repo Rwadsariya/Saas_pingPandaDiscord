@@ -4,13 +4,18 @@
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { client } from "@/lib/client"
-import { EventCategory } from "@prisma/client"
+import { EventCategory, Event } from "@prisma/client"
 import { useQuery } from "@tanstack/react-query"
-import { BarChartIcon } from "lucide-react"
+import { ArrowUpDown, BarChartIcon } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
 import { EmptyCategoryState } from "./empty-category-state"
 import { isAfter, isToday, startOfMonth, startOfWeek } from "date-fns"
+import { ColumnDef, ColumnFilter, ColumnFiltersState, flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, Row, SortingState,useReactTable } from "@tanstack/react-table";
+import { Button } from "@/components/ui/button"
+import { cn } from "@/utils"
+import { Heading } from "@/components/heading"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface CategoryPageContentProps {
     hasEvent?: boolean
@@ -39,7 +44,7 @@ export const CategoryPageContent = ({ hasEvent: initialHasEvent, category }: Cat
         return <EmptyCategoryState categoryName={category.name} />
     }
 
-    const { data } = useQuery({
+    const { data ,isFetching} = useQuery({
         queryKey: ["events", category.name, pagination.pageIndex, pagination.pageSize, activeTab],
         queryFn: async () => {
             const res = await client.category.getEventsByCategoryName.$get({
@@ -55,56 +60,119 @@ export const CategoryPageContent = ({ hasEvent: initialHasEvent, category }: Cat
         enabled: pollingData.hasEvent
     })
 
+    const columns: ColumnDef<Event>[] = useMemo(() => [
+        {
+            accessorKey: "category",
+            header: "Category",
+            cell: () => <span>{category.name || "uncategorized"}</span>
+        }, {
+            accessorKey: "createdAt",
+            header: ({ column }) => {
+                return (
+                    <Button variant={"ghost"} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}>Date <ArrowUpDown className="ml-2 size-4" /></Button>
+                )
+            },
+            cell: ({ row }) => {
+                return new Date(row.getValue("createdAt")).toLocaleString()
+            }
+        },
+        ...(data?.events[0]
+            ? Object.keys(data.events[0].fields as object).map((field) => ({
+                accessorFn: (row: Event) =>
+                    (row.fields as Record<string, any>)[field],
+                header: field,
+                cell: ({ row }: { row: Row<Event> }) =>
+                    (row.original.fields as Record<string, any>)[field] || "-",
+            }))
+            : []),
+        {
+            accessorKey: "deliveryStatus",
+            header: "Delivery Status",
+            cell: ({ row }) => (
+                <span className={cn("px-2 py-1 rounded-full text-xs font-semibold", {
+                    "bg-green-100 text-green-800": row.getValue("deliveryStatus") === "DELIVERED",
+                    "bg-red-100 text-red-800": row.getValue("deliveryStatus") === "FAILED",
+                    "bg-yellow-100 text-yellow-800": row.getValue("deliveryStatus") === "PENDING"
+                })}>
+                    {row.getValue("deliveryStatus")}
+                </span>
+            )
+        }
+    ], [category.name, data?.events])
+
+
+    const [sorting, setSorting] = useState<SortingState>([])
+    const [columnFilters, setColumnFilters] =  useState<ColumnFiltersState>([])
+
+    const table = useReactTable({
+        data : data?.events || [],
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+        onSortingChange: setSorting,
+        getSortedRowModel: getSortedRowModel(),
+        onColumnFiltersChange: setColumnFilters,
+        getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        manualPagination: true,
+        pageCount: Math.ceil((data?.eventCount || 0)/pagination.pageSize),
+        onPaginationChange: setPagination,
+        state: {
+            sorting,
+            columnFilters,
+            pagination
+        }
+    })
+
     const numericFieldSums = useMemo(() => {
         if (!data?.events || data.events.length === 0) return {}
 
-    const sums: Record<
-      string,
-      {
-        total: number
-        thisWeek: number
-        thisMonth: number
-        today: number
-      }
-    > = {}
+        const sums: Record<
+            string,
+            {
+                total: number
+                thisWeek: number
+                thisMonth: number
+                today: number
+            }
+        > = {}
 
-    const now = new Date()
-    const weekStart = startOfWeek(now, { weekStartsOn: 0 })
-    const monthStart = startOfMonth(now)
+        const now = new Date()
+        const weekStart = startOfWeek(now, { weekStartsOn: 0 })
+        const monthStart = startOfMonth(now)
 
-    data.events.forEach((event) => {
-      const eventDate = event.createdAt
+        data.events.forEach((event) => {
+            const eventDate = event.createdAt
 
-      Object.entries(event.fields as object).forEach(([field, value]) => {
-        if (typeof value === "number") {
-          if (!sums[field]) {
-            sums[field] = { total: 0, thisWeek: 0, thisMonth: 0, today: 0 }
-          }
+            Object.entries(event.fields as object).forEach(([field, value]) => {
+                if (typeof value === "number") {
+                    if (!sums[field]) {
+                        sums[field] = { total: 0, thisWeek: 0, thisMonth: 0, today: 0 }
+                    }
 
-          sums[field].total += value
+                    sums[field].total += value
 
-          if (
-            isAfter(eventDate, weekStart) ||
-            eventDate.getTime() === weekStart.getTime()
-          ) {
-            sums[field].thisWeek += value
-          }
+                    if (
+                        isAfter(eventDate, weekStart) ||
+                        eventDate.getTime() === weekStart.getTime()
+                    ) {
+                        sums[field].thisWeek += value
+                    }
 
-          if (
-            isAfter(eventDate, monthStart) ||
-            eventDate.getTime() === monthStart.getTime()
-          ) {
-            sums[field].thisMonth += value
-          }
+                    if (
+                        isAfter(eventDate, monthStart) ||
+                        eventDate.getTime() === monthStart.getTime()
+                    ) {
+                        sums[field].thisMonth += value
+                    }
 
-          if (isToday(eventDate)) {
-            sums[field].today += value
-          }
-        }
-      })
-    })
+                    if (isToday(eventDate)) {
+                        sums[field].today += value
+                    }
+                }
+            })
+        })
 
-    return sums
+        return sums
     }, [data?.events])
 
     const NumericFieldCards = () => {
@@ -164,6 +232,62 @@ export const CategoryPageContent = ({ hasEvent: initialHasEvent, category }: Cat
                     </div>
                 </TabsContent>
             </Tabs>
+
+            <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                    <div className="w-full flex flex-col gap-4">
+                        <Heading className="text-3xl">Event Overview</Heading>
+                    </div>
+                </div>
+                <Card contentClassName="px-6 py-4">
+                    <Table>
+                        <TableHeader>
+                            {table.getHeaderGroups().map((headerGroup)=>(
+                                <TableRow key={headerGroup.id}>
+                                    {headerGroup.headers.map((header)=> (
+                                        <TableHead key={header.id}>
+                                            {header.isPlaceholder ? null : flexRender(
+                                                header.column.columnDef.header,
+                                                header.getContext()
+                                            )}
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableHeader>
+                        <TableBody>
+                            {isFetching ? [...Array(5)].map((_,rowIndex)=> (
+                                <TableRow key={rowIndex}>
+                                    {columns.map((_,cellIndex)=>(
+                                        <TableCell key={cellIndex}>
+                                            <div className="h-4 w-full rounded bg-gray-200 animate-pulse"/>
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            )): table.getRowModel().rows.length ? table.getRowModel().rows.map((row)=>(
+                                <TableRow key={row.id}>
+                                    {row.getVisibleCells().map((cell)=> (
+                                        <TableCell key={cell.id}>
+                                            {flexRender(cell.column.columnDef.cell,cell.getContext())}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            )) : <TableRow>
+                                <TableCell colSpan={columns.length} className="h-24 text-center">No Results.</TableCell>
+                            </TableRow>}
+                        </TableBody>
+                    </Table>
+                </Card>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 py-4">
+                <Button variant={"outline"} size={"sm"} onClick={()=> table.previousPage()} disabled={!table.getCanPreviousPage() || isFetching}>
+                    Previous
+                </Button>
+                <Button variant={"outline"} size={"sm"} onClick={()=> table.nextPage()} disabled={!table.getCanNextPage() || isFetching}>
+                    Next
+                </Button>
+            </div>
         </div>
     )
 }

@@ -11,10 +11,11 @@ import { HTTPException } from "hono/http-exception"
 
 export const categoryRouter = router({
   getEventCategories: privateProcedure.query(async ({ c, ctx }) => {
+    const now = new Date()
+    const firstDayOfMonth = startOfMonth(now)
+
     const categories = await db.eventCategory.findMany({
-      where: {
-        userId: ctx.user.id,
-      },
+      where: { userId: ctx.user.id },
       select: {
         id: true,
         name: true,
@@ -22,61 +23,51 @@ export const categoryRouter = router({
         color: true,
         updatedAt: true,
         createdAt: true,
+        events: {
+          where: { createdAt: { gte: firstDayOfMonth } },
+          select: {
+            fields: true,
+            createdAt: true,
+          },
+        },
+        _count: {
+          select: {
+            events: {
+              where: { createdAt: { gte: firstDayOfMonth } },
+            },
+          },
+        },
       },
       orderBy: { updatedAt: "desc" },
     })
 
-    const categorieswithCount = await Promise.all(
-      categories.map(async (category: { id: any }) => {
-        const now = new Date()
-        const firstDayOfMonth = startOfMonth(now)
+    const categoriesWithCounts = categories.map((category) => {
+      const uniqueFieldNames = new Set<string>()
+      let lastPing: Date | null = null
 
-        const [uniqueFieldCount, eventsCount, lastPing] = await Promise.all([
-          db.event
-            .findMany({
-              where: {
-                EventCategory: { id: category.id },
-                createdAt: { gte: firstDayOfMonth },
-              },
-              select: {
-                fields: true,
-              },
-              distinct: ["fields"],
-            })
-            .then((events: any[]) => {
-              const fieldNames = new Set<string>()
-              events.forEach((event) => {
-                Object.keys(event.fields as object).forEach((fieldName) =>
-                  fieldNames.add(fieldName)
-                )
-              })
-              return fieldNames.size
-            }),
-          db.event.count({
-            where: {
-              EventCategory: { id: category.id },
-              createdAt: { gte: firstDayOfMonth },
-            },
-          }),
-          db.event.findFirst({
-            where: {
-              EventCategory: { id: category.id },
-            },
-            orderBy: { createdAt: "desc" },
-            select: {
-              createdAt: true,
-            },
-          }),
-        ])
-        return {
-          ...category,
-          uniqueFieldCount,
-          eventsCount,
-          lastPing: lastPing?.createdAt || null,
+      category.events.forEach((event) => {
+        Object.keys(event.fields as object).forEach((fieldName) => {
+          uniqueFieldNames.add(fieldName)
+        })
+        if (!lastPing || event.createdAt > lastPing) {
+          lastPing = event.createdAt
         }
       })
-    )
-    return c.superjson({ categories: categorieswithCount })
+
+      return {
+        id: category.id,
+        name: category.name,
+        emoji: category.emoji,
+        color: category.color,
+        updatedAt: category.updatedAt,
+        createdAt: category.createdAt,
+        uniqueFieldCount: uniqueFieldNames.size,
+        eventsCount: category._count.events,
+        lastPing,
+      }
+    })
+
+    return c.superjson({ categories: categoriesWithCounts })
   }),
 
   deleteCategory: privateProcedure
@@ -263,5 +254,4 @@ export const categoryRouter = router({
         uniqueFieldCount,
       })
     }),
-
 })

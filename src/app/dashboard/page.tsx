@@ -6,30 +6,55 @@ import { DashboardPageContent } from "./dashboard-page-content";
 import { CreateEventCategoryModel } from "@/components/create-event-categorymodel";
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
+import { createCheckoutSession } from "@/lib/stripe";
+import { PaymentSuccessModel } from "@/components/ui/payment-success-model";
 
-const Page = async () => {
+interface PageProps {
+    searchParams: {
+        [key: string]: string | string[] | undefined;
+    }
+}
+const Page = async ({ searchParams }: PageProps) => {
 
     const auth = await currentUser();
 
-    if (!auth){
+    if (!auth) {
         redirect('/sign-in')
     }
-    
+
     const user = await db.user.findUnique({
-        where:{
+        where: {
             externalId: auth.id
         }
     })
 
-    if (!user){
+    if (!user) {
         redirect('/sign-in')
     }
 
+    const intent = searchParams.intent
 
-    return(
-        <DashboardPage cta={<CreateEventCategoryModel><Button className="w-full sm:w-fit"><PlusIcon className="size-4 mr-2"/>Add Category</Button></CreateEventCategoryModel>} title="Dashboard" >
-            <DashboardPageContent />
-        </DashboardPage>
+    if (intent === "upgrade") {
+        const session = await createCheckoutSession({
+            userEmail: user.email,
+            userId: user.id,
+        })
+        if (session.url) {
+            redirect(session.url)
+        }
+    }
+
+    const success = searchParams.success
+
+    return (
+        <>
+        {
+            success ? <PaymentSuccessModel></PaymentSuccessModel> : null
+        }
+            <DashboardPage cta={<CreateEventCategoryModel><Button className="w-full sm:w-fit"><PlusIcon className="size-4 mr-2" />Add Category</Button></CreateEventCategoryModel>} title="Dashboard" >
+                <DashboardPageContent />
+            </DashboardPage>
+        </>
     )
 }
 
