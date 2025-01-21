@@ -2,6 +2,14 @@
 
 Welcome to PingPanda – a modern, scalable SaaS platform built with cutting-edge technologies for real-time event notifications. Whether you’re monitoring application events, syncing real-time updates via Discord, or offering premium features through secure payments, PingPanda delivers it all with an elegant, user-friendly interface.
 
+## Deployed Application: PingPanda
+
+The application is live and can be accessed using the following URL:
+
+🔗 [PingPanda](https://melodic-clafoutis-df23e3.netlify.app/)
+
+Feel free to explore the features and share your feedback!
+
 ## Features
 
 * 🛠️ Modern Next.js SaaS: Full-stack application built with Next.js, Tailwind CSS, and TypeScript.
