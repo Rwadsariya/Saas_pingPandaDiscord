@@ -4,7 +4,7 @@ import { privateProcedure, publicProcedure } from "../procedures";
 import { db } from "@/db";
 
 export const authRouter = router({
-    getDatabaseSyncStatus: privateProcedure.query(async ({ c, ctx})=>{
+    getDatabaseSyncStatus: publicProcedure.query(async ({ c, ctx})=>{
 
         const auth = await currentUser()
 
